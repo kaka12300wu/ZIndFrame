@@ -5,6 +5,7 @@ using System.Net.Sockets;
 using System.Net;
 using System.Text;
 using System.Threading;
+using System.IO;
 
 public class TcpS : MonoBehaviour
 {
@@ -22,28 +23,24 @@ public class TcpS : MonoBehaviour
     }
     private TcpListener listener;
     private bool working = false;
-    private List<TcpClient> clientList;
+    private Dictionary<string, TcpClient> clientDic;
     private NetworkStream stream;
-    private Thread receiveThread;
-    private Thread acceptThread;
-
+    private Thread serverThread;
+    private BinaryReader reader;
+    private BinaryWriter writer;
 
     public void StartListen( string ip, int port )
     {
         try
         {
             working = true;
-            clientList = new List<TcpClient>();
+            clientDic = new Dictionary<string, TcpClient>();
             listener = new TcpListener( IPAddress.Parse( ip ), port );
             listener.Start();
 
-            ThreadStart tAcceptStart = new ThreadStart(AcceptClient);
-            acceptThread = new Thread(tAcceptStart);
-            acceptThread.Start();
-
-            ThreadStart tStart = new ThreadStart( StartReceive );
-            receiveThread = new Thread( tStart );
-            receiveThread.Start();
+            ThreadStart tStart = new ThreadStart( ServerProc );
+            serverThread = new Thread( tStart );
+            serverThread.Start();
 
         }
         catch
@@ -58,48 +55,84 @@ public class TcpS : MonoBehaviour
         {
             listener.Stop();
             listener = null;
-            clientList.ForEach( ( elem ) => elem.Close() );
-            clientList.Clear();
-            clientList = null;
+            
+            foreach(var pair in clientDic)
+            {
+                pair.Value.Close();
+            }
+            clientDic.Clear();
+            clientDic = null;
             working = false;
         }
-        if (null != receiveThread)
+        if (null != serverThread)
         {
-            receiveThread.Abort();
-            receiveThread = null;
-        }
-        if(null != acceptThread)
-        {
-            acceptThread.Abort();
-            acceptThread = null;
+            serverThread.Abort();
+            serverThread = null;
         }
     }
 
     public void SendTo(string msg,string ip = "")
     {
-
+        byte[] buffer = Encoding.UTF8.GetBytes( msg );
+        if (!string.IsNullOrEmpty(ip))
+        {
+            SendTo( buffer, ip );
+        }
+        else
+        {
+            foreach(var pair in clientDic)
+            {
+                SendTo( buffer, pair.Key );
+            }
+        }
 
     }
 
     void SendTo(byte[] buffer,string ip)
     {
-
+        TcpClient client = null;
+        clientDic.TryGetValue(ip,out client);
+        if(null == client || !client.Connected)
+        {
+            GLog.Warn("Failed to send data to "+ip);
+            return;
+        }
+        NetworkStream cStream = client.GetStream();
+        writer = new BinaryWriter( cStream );
+        writer.Write( (short)buffer.Length );
+        writer.Write(buffer,0,buffer.Length);
+        cStream.Flush();
     }
 
-    void StartReceive()
+    void ServerProc()
     {
         while (true)
         {
-            if (null == clientList)
-                break;
-            foreach (var c in clientList)
+            if (!working)
             {
-                stream = c.GetStream();
-                byte[] buffer = new byte[stream.Length];
-                stream.Read( buffer, 0, buffer.Length );
-                Debug.Log( Encoding.UTF8.GetString( buffer ) );
+                break;
             }
-            Thread.Sleep( 1000 );
+            if (listener.Pending())
+                AddNewClient( listener.AcceptTcpClient() );
+
+            foreach (var pair in clientDic)
+            {
+                if (!pair.Value.Connected)
+                    continue;
+                try
+                {
+                    stream = pair.Value.GetStream();
+                    reader = new BinaryReader( stream );
+                    short length = reader.ReadInt16();
+                    byte[] buffer = reader.ReadBytes( length );
+                    string msg = Encoding.UTF8.GetString( buffer );
+                    GEvent.OnEvent( eEvent.AddMsg, string.Format( "{0}:{1}", pair.Key, msg ) );
+                }
+                catch
+                {
+
+                }
+            }
         }
     }
 
@@ -108,20 +141,14 @@ public class TcpS : MonoBehaviour
     {
         if (null == client)
             return;
-        Debug.Log( "New client connected:" + client.Client.RemoteEndPoint.ToString() );
-        clientList.Add( client );
-    }
-
-    void AcceptClient()
-    {
-        while (true)
+        IPEndPoint ipe = client.Client.RemoteEndPoint as IPEndPoint;
+        if(clientDic.ContainsKey(ipe.Address.ToString()))
         {
-            if (!working)
-            {
-                break;
-            }
-            AddNewClient(listener.AcceptTcpClient());
+            clientDic[ipe.Address.ToString()].Close();
+            clientDic.Remove( ipe.Address.ToString() );
         }
+        clientDic.Add( ipe.Address.ToString(), client );
+        GEvent.OnEvent( eEvent.AddMsg, string.Format( "{0}: client connected!", ipe.Address.ToString() ) );
     }
 
     private void OnApplicationQuit()

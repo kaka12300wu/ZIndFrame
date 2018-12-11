@@ -4,6 +4,7 @@ using System.Collections;
 using System.Collections.Generic;
 using System.Net.Sockets;
 using System.Net;
+using System.IO;
 using UnityEngine;
 using System.Threading;
 
@@ -13,6 +14,8 @@ public class TcpC : MonoBehaviour
     private Thread listenThread;
     private NetworkStream stream;
     private byte[] data;
+    private BinaryWriter writer;
+    private BinaryReader reader;
 
 
     private static TcpC _instance;
@@ -28,22 +31,33 @@ public class TcpC : MonoBehaviour
         }
     }
 
-    public void ConnectTo(string ip,int port,Action callback = null)
+    public void ConnectTo(string ip,int port,Action<string> callback = null)
     {
         try
         { 
             client = new TcpClient( AddressFamily.InterNetwork );
             client.BeginConnect(ip, port, new AsyncCallback((ar)=> {
-                Debug.Log("Connect AsyncCallback");
-                if(null != callback)
-                    callback();
+                if(null == ar.AsyncState)
+                {
+                    return;
+                }
+                if (null != callback)
+                {
+                    TcpClient c = ar.AsyncState as TcpClient;
+                    IPEndPoint iep = c.Client.RemoteEndPoint as IPEndPoint;
+                    callback( iep.Address.ToString() );
+                }
+
                 stream = client.GetStream();
-                data = new byte[1024];
+                writer = new BinaryWriter( stream );
+                reader = new BinaryReader( stream );
+
                 client.EndConnect(ar);
-            }), client);
-            ThreadStart tStart = new ThreadStart(ReceiveFromServer);
-            listenThread = new Thread(tStart);
-            listenThread.Start();
+
+                ThreadStart tStart = new ThreadStart( ReceiveFromServer );
+                listenThread = new Thread( tStart );
+                listenThread.Start();
+            } ), client);            
         }
         catch
         {
@@ -72,8 +86,9 @@ public class TcpC : MonoBehaviour
         if(null != client && client.Connected)
         {
             msg = msg.Trim();
-            byte[] data = Encoding.UTF8.GetBytes(msg);
-            stream.Write(data,0,data.Length);
+            byte[] buffer = Encoding.UTF8.GetBytes(msg);
+            writer.Write( (short)buffer.Length );
+            writer.Write( buffer, 0, buffer.Length );
         }
     }
 
@@ -81,13 +96,16 @@ public class TcpC : MonoBehaviour
     {
         while(client.Connected)
         {
-            int leng = stream.Read(data,0,(int)stream.Length);
-            if(leng > 0)
+            try
             {
-                string msg = Encoding.UTF8.GetString( data );
+                short length = reader.ReadInt16();
+                byte[] buffer = new byte[length];
+                reader.Read( buffer, 0, length );
+                string msg = Encoding.UTF8.GetString( buffer );
+                GEvent.OnEvent( eEvent.AddMsg, msg );
                 stream.Flush();
-                Debug.Log( msg );
             }
+            catch { }
         }
     }
 
@@ -95,4 +113,5 @@ public class TcpC : MonoBehaviour
     {
         StopConnect();
     }
+
 }
