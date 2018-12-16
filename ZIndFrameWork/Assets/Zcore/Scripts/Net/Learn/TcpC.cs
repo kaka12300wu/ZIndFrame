@@ -69,6 +69,7 @@ public class TcpC : MonoBehaviour
     {
         if(null != listenThread)
         {
+            listenThread.Interrupt();
             listenThread.Abort();
             listenThread = null;
         }
@@ -102,7 +103,7 @@ public class TcpC : MonoBehaviour
                 byte[] buffer = new byte[length];
                 reader.Read( buffer, 0, length );
                 string msg = Encoding.UTF8.GetString( buffer );
-                GEvent.OnEvent( eEvent.AddMsg, msg );
+                GEvent.OnEvent( eEvent.AddMsg, "Server:" + msg );
                 stream.Flush();
             }
             catch { }

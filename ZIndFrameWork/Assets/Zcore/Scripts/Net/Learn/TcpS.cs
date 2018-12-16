@@ -29,13 +29,13 @@ public class TcpS : MonoBehaviour
     private BinaryReader reader;
     private BinaryWriter writer;
 
-    public void StartListen( string ip, int port )
+    public void StartListen(int port )
     {
         try
         {
             working = true;
             clientDic = new Dictionary<string, TcpClient>();
-            listener = new TcpListener( IPAddress.Parse( ip ), port );
+            listener = new TcpListener( IPAddress.Parse(NetUtils.GetSelfIP4Address()), port );
             listener.Start();
 
             ThreadStart tStart = new ThreadStart( ServerProc );
@@ -66,6 +66,7 @@ public class TcpS : MonoBehaviour
         }
         if (null != serverThread)
         {
+            serverThread.Interrupt();
             serverThread.Abort();
             serverThread = null;
         }
@@ -136,7 +137,6 @@ public class TcpS : MonoBehaviour
         }
     }
 
-    //TODO 去重
     void AddNewClient( TcpClient client )
     {
         if (null == client)

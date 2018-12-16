@@ -9,8 +9,7 @@ public enum ClientType
     Null,
     TcpS,
     TcpC,
-    UdpBroadcastC,
-    UdpBroadcastS,
+    UdpBroadcast,
     UdpGroupC,
     UdpGroupS,
     UniCastC,
@@ -52,84 +51,97 @@ public class PageSocketTest : MonoBehaviour
     {
         msgContent.text = "";
         localIP.text = string.Format("本机IP:{0}", NetUtils.GetSelfIP4Address());
-        btnStop.gameObject.SetActive( false );
+        btnStop.gameObject.SetActive(false);
         AddMsg("start up....");
-        GEvent.Add( eEvent.AddMsg, OnAddMsgEvent );
+        GEvent.Add(eEvent.AddMsg, OnAddMsgEvent);
     }
 
     private void OnDestroy()
     {
-        GEvent.RemoveEvent(eEvent.AddMsg,OnAddMsgEvent);
+        GEvent.RemoveEvent(eEvent.AddMsg, OnAddMsgEvent);
     }
 
     private void Update()
     {
-        if(cachedMsg.Count > 0)
+        if (cachedMsg.Count > 0)
         {
-            cachedMsg.ForEach( ( msg ) => AddMsg( msg ) );
+            cachedMsg.ForEach(( msg ) => AddMsg(msg));
             cachedMsg.Clear();
         }
     }
 
-    private void OnAddMsgEvent(params object[] _args)
+    private void OnAddMsgEvent( params object[] _args )
     {
         string msg = (string)_args[0];
-        cachedMsg.Add( msg );
+        cachedMsg.Add(msg);
     }
-       
-    public void AddMsg(string msg)
+
+    public void AddMsg( string msg )
     {
         msgContent.text += msg + "\n";
-        msgContent.rectTransform.SetSizeWithCurrentAnchors( RectTransform.Axis.Vertical, msgContent.preferredHeight + 20 );
+        msgContent.rectTransform.SetSizeWithCurrentAnchors(RectTransform.Axis.Vertical, msgContent.preferredHeight + 20);
         verticalBar.value = 0;
     }
 
-    void SetControlEnable(bool canControl)
+    void SetControlEnable( bool canControl )
     {
         broadCastToggle.interactable = canControl;
         groupCastToggle.interactable = canControl;
         tcpConnectToggle.interactable = canControl;
+        uniCastToggle.interactable = canControl;
         inputIP.interactable = canControl;
         inputPort.interactable = canControl;
     }
 
     public void OnConnect()
     {
-        TcpC.instance.ConnectTo( inputIP.text, int.Parse( inputPort.text ), (ip)=> 
+        TcpC.instance.ConnectTo(inputIP.text, int.Parse(inputPort.text), ( ip ) =>
         {
-            GEvent.OnEvent( eEvent.AddMsg, string.Format("Connect to {0} success!",ip) );
-        } );
-        btnConnnect.gameObject.SetActive( false );
-        btnStop.gameObject.SetActive( true );
-        btnStart.gameObject.SetActive( false );
-        SetControlEnable( false );
+         GEvent.OnEvent(eEvent.AddMsg, string.Format("Connect to {0} success!", ip));
+        });
+        btnConnnect.gameObject.SetActive(false);
+        btnStop.gameObject.SetActive(true);
+        btnStart.gameObject.SetActive(false);
+        SetControlEnable(false);
         cType = ClientType.TcpC;
     }
 
     public void OnStart()
     {
-        btnStart.gameObject.SetActive( false );
-        btnConnnect.gameObject.SetActive( false );
-        btnStop.gameObject.SetActive( true );
-        SetControlEnable( false );
-        cType = ClientType.TcpS;
-        TcpS.instance.StartListen(NetUtils.GetSelfIP4Address(), 9091);
+        btnStart.gameObject.SetActive(false);
+        btnConnnect.gameObject.SetActive(false);
+        btnStop.gameObject.SetActive(true);
+        SetControlEnable(false);
+        if (tcpConnectToggle.isOn)
+        {
+            cType = ClientType.TcpS;
+            TcpS.instance.StartListen(int.Parse(inputPort.text));
+        }
+        else if (broadCastToggle.isOn)
+        {
+            cType = ClientType.UdpBroadcast;
+            UdpBroadcast.instance.StartBroadcast();
+        }
     }
 
     public void OnStop()
     {
-        btnStart.gameObject.SetActive( true );
-        btnConnnect.gameObject.SetActive( true );
-        btnStop.gameObject.SetActive( false );
+        btnStart.gameObject.SetActive(true);
+        btnConnnect.gameObject.SetActive(true);
+        btnStop.gameObject.SetActive(false);
         if (cType == ClientType.TcpC)
         {
             TcpC.instance.StopConnect();
         }
-        else if(cType == ClientType.TcpS)
+        else if (cType == ClientType.TcpS)
         {
             TcpS.instance.Stop();
         }
-        SetControlEnable( true );
+        else if (cType == ClientType.UdpBroadcast)
+        {
+            UdpBroadcast.instance.Stop();
+        }
+        SetControlEnable(true);
         cType = ClientType.Null;
     }
 
@@ -141,7 +153,11 @@ public class PageSocketTest : MonoBehaviour
         }
         else if (cType == ClientType.TcpS)
         {
-            TcpS.instance.SendTo( inputSend.text );
+            TcpS.instance.SendTo(inputSend.text);
+        }
+        else if(cType == ClientType.UdpBroadcast)
+        {
+            UdpBroadcast.instance.Send(inputSend.text);
         }
     }
 }

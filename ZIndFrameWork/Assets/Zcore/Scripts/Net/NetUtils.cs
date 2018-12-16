@@ -30,4 +30,29 @@ public class NetUtils
 #endif
         return retAddress;
     }
+
+    public static string GetBroadcastIPAddress()
+    {
+        string retAddress = "192.168.0.255";
+#if !UNITY_EDITOR
+#if UNITY_ANDROID
+        AndroidJavaClass ajClass = new AndroidJavaClass( "com.unity3d.player.UnityPlayer" );
+        AndroidJavaObject ajObj = ajClass.GetStatic<AndroidJavaObject>( "currentActivity" );
+        if (ajObj.Call<bool>( "IsWifiApOpen" ))
+            retAddress = "192.168.43.255";
+#elif UNITY_IOS
+
+#endif
+#endif
+        return retAddress;
+    }
+
+    public static int broadcastPort
+    {
+        get
+        {
+            return 9092;
+        }
+    }
+        
 }
