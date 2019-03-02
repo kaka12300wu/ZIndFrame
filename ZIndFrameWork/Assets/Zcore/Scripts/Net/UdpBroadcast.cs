@@ -1,5 +1,6 @@
 ﻿using System.Threading;
 using System.Collections.Generic;
+using System.Collections;
 using System.Text;
 using System.Net;
 using System.Net.Sockets;
@@ -26,12 +27,20 @@ public class UdpBroadcast : MonoBehaviour
     private Thread receiveThread;
     private IPEndPoint commuIPE;
     private string selfIP4Address;
+    private Queue<string> sendQueue;
+    private int frameSendMax = 100;
+
+    class BroadCastInfo
+    {
+        public string msg;
+        public int times;
+    }
+
 
     public void StartBroadcast()
     {
         selfIP4Address = NetUtils.GetSelfIP4Address();
-        udpSpeaker = new UdpClient(0);
-
+        udpSpeaker = new UdpClient();
         commuIPE = new IPEndPoint(IPAddress.Parse(NetUtils.GetBroadcastIPAddress()), NetUtils.broadcastPort);
 
         ThreadStart tStart = new ThreadStart(Receive);
@@ -42,7 +51,17 @@ public class UdpBroadcast : MonoBehaviour
         receiveThread.Start();
     }
 
-    public void Send( string msg )
+    public void Send( string msg,int times = 5)
+    {
+        if (null == sendQueue)
+            sendQueue = new Queue<string>();
+        for (int i = 0; i < times; ++i)
+        {
+            sendQueue.Enqueue(msg);
+        }        
+    }
+
+    void InternalSend(string msg)
     {
         if (null != udpSpeaker)
         {
@@ -78,11 +97,7 @@ public class UdpBroadcast : MonoBehaviour
         while (true)
         {
             byte[] buffer = udpListener.Receive(ref ipe);
-            if (ipe.Address.ToString() == selfIP4Address)
-            {
-                Debug.Log("Received self send msg:" + Encoding.UTF8.GetString(buffer));
-            }
-            else
+            if (ipe.Address.ToString() != selfIP4Address)
             {
                 GEvent.OnEvent(eEvent.AddMsg, string.Format("{0}({1}):{2}", ipe.Address, ipe.Port, Encoding.UTF8.GetString(buffer)));
             }
@@ -92,5 +107,19 @@ public class UdpBroadcast : MonoBehaviour
     private void OnApplicationQuit()
     {
         Stop();
+    }
+
+    private void Update()
+    {
+        if(null != sendQueue)
+        {
+            int frameSendCount = 0;
+            while(sendQueue.Count > 0)
+            {
+                InternalSend(sendQueue.Dequeue());
+                if (frameSendCount++ >= frameSendMax)
+                    break;
+            }
+        }
     }
 }

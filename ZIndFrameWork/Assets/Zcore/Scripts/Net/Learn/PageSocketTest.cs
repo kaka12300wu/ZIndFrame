@@ -52,7 +52,8 @@ public class PageSocketTest : MonoBehaviour
         msgContent.text = "";
         localIP.text = string.Format("本机IP:{0}", NetUtils.GetSelfIP4Address());
         btnStop.gameObject.SetActive(false);
-        AddMsg("start up....");
+        AddMsg(localIP.text + ":start up....");
+        AddMsg("当前网络类型：" + Application.internetReachability.ToString());
         GEvent.Add(eEvent.AddMsg, OnAddMsgEvent);
     }
 
